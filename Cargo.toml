@@ -1,0 +1,11 @@
+[package]
+name = "grove-compiler"
+version = "0.1.0"
+edition = "2021"
+description = "Season-based compiler pipeline with ternary bytecode — Spring→Summer→Autumn→Winter"
+license = "MIT"
+repository = "https://github.com/SuperInstance/grove-compiler"
+keywords = ["compiler", "ternary", "bytecode", "parser", "seasons"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
