@@ -1,10 +1,13 @@
 [package]
+rust-version = "1.70"
+readme = "README.md"
 name = "grove-compiler"
 version = "0.1.0"
 edition = "2024"
 description = "A tree-based compiler for the SuperInstance ecosystem — AST as a grove of trees, type checking as ecological niche verification, and code generation as harvest season."
 license = "MIT"
 repository = "https://github.com/SuperInstance/grove-compiler"
+documentation = "https://docs.rs/grove-compiler"
 keywords = ["compiler", "ternary", "ast", "bytecode", "superinstance"]
 categories = ["compilers"]
 
