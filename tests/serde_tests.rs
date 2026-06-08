@@ -38,11 +38,27 @@ fn serde_expr_roundtrip() {
     let exprs = vec![
         Expr::Lit(42.0),
         Expr::Var("x".into()),
-        Expr::BinOp(Box::new(Expr::Lit(1.0)), BinOpKind::Add, Box::new(Expr::Lit(2.0))),
+        Expr::BinOp(
+            Box::new(Expr::Lit(1.0)),
+            BinOpKind::Add,
+            Box::new(Expr::Lit(2.0)),
+        ),
         Expr::Unary(UnaryKind::Neg, Box::new(Expr::Lit(5.0))),
-        Expr::If(Box::new(Expr::Lit(1.0)), Box::new(Expr::Lit(2.0)), Box::new(Expr::Lit(3.0))),
-        Expr::Let("x".into(), Box::new(Expr::Lit(5.0)), Box::new(Expr::Var("x".into()))),
-        Expr::Ternary(Box::new(Expr::Lit(1.0)), Box::new(Expr::Lit(2.0)), Box::new(Expr::Lit(3.0))),
+        Expr::If(
+            Box::new(Expr::Lit(1.0)),
+            Box::new(Expr::Lit(2.0)),
+            Box::new(Expr::Lit(3.0)),
+        ),
+        Expr::Let(
+            "x".into(),
+            Box::new(Expr::Lit(5.0)),
+            Box::new(Expr::Var("x".into())),
+        ),
+        Expr::Ternary(
+            Box::new(Expr::Lit(1.0)),
+            Box::new(Expr::Lit(2.0)),
+            Box::new(Expr::Lit(3.0)),
+        ),
     ];
     for expr in &exprs {
         let json = serde_json::to_string(expr).unwrap();

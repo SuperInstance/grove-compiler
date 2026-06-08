@@ -80,11 +80,7 @@ pub fn optimize(expr: &Expr) -> Expr {
 
             // Dead code elimination: if condition is a known constant
             if let Expr::Lit(n) = &cond_opt {
-                return if *n != 0.0 {
-                    then_opt
-                } else {
-                    else_opt
-                };
+                return if *n != 0.0 { then_opt } else { else_opt };
             }
 
             Expr::If(Box::new(cond_opt), Box::new(then_opt), Box::new(else_opt))
@@ -107,11 +103,7 @@ pub fn optimize(expr: &Expr) -> Expr {
 
             // Known condition
             if let Expr::Lit(n) = &cond_opt {
-                return if *n != 0.0 {
-                    then_opt
-                } else {
-                    else_opt
-                };
+                return if *n != 0.0 { then_opt } else { else_opt };
             }
 
             Expr::Ternary(Box::new(cond_opt), Box::new(then_opt), Box::new(else_opt))
@@ -164,32 +156,52 @@ mod tests {
 
     #[test]
     fn constant_fold_add() {
-        let expr = Expr::BinOp(Box::new(Expr::Lit(2.0)), BinOpKind::Add, Box::new(Expr::Lit(3.0)));
+        let expr = Expr::BinOp(
+            Box::new(Expr::Lit(2.0)),
+            BinOpKind::Add,
+            Box::new(Expr::Lit(3.0)),
+        );
         assert_eq!(optimize(&expr), Expr::Lit(5.0));
     }
 
     #[test]
     fn constant_fold_mul() {
-        let expr = Expr::BinOp(Box::new(Expr::Lit(4.0)), BinOpKind::Mul, Box::new(Expr::Lit(3.0)));
+        let expr = Expr::BinOp(
+            Box::new(Expr::Lit(4.0)),
+            BinOpKind::Mul,
+            Box::new(Expr::Lit(3.0)),
+        );
         assert_eq!(optimize(&expr), Expr::Lit(12.0));
     }
 
     #[test]
     fn constant_fold_div() {
-        let expr = Expr::BinOp(Box::new(Expr::Lit(10.0)), BinOpKind::Div, Box::new(Expr::Lit(2.0)));
+        let expr = Expr::BinOp(
+            Box::new(Expr::Lit(10.0)),
+            BinOpKind::Div,
+            Box::new(Expr::Lit(2.0)),
+        );
         assert_eq!(optimize(&expr), Expr::Lit(5.0));
     }
 
     #[test]
     fn constant_fold_div_by_zero() {
-        let expr = Expr::BinOp(Box::new(Expr::Lit(10.0)), BinOpKind::Div, Box::new(Expr::Lit(0.0)));
+        let expr = Expr::BinOp(
+            Box::new(Expr::Lit(10.0)),
+            BinOpKind::Div,
+            Box::new(Expr::Lit(0.0)),
+        );
         // Should NOT fold division by zero
         assert!(matches!(optimize(&expr), Expr::BinOp(_, _, _)));
     }
 
     #[test]
     fn constant_fold_comparison() {
-        let expr = Expr::BinOp(Box::new(Expr::Lit(3.0)), BinOpKind::Lt, Box::new(Expr::Lit(5.0)));
+        let expr = Expr::BinOp(
+            Box::new(Expr::Lit(3.0)),
+            BinOpKind::Lt,
+            Box::new(Expr::Lit(5.0)),
+        );
         assert_eq!(optimize(&expr), Expr::Lit(1.0));
     }
 
@@ -273,9 +285,17 @@ mod tests {
     fn nested_constant_fold() {
         // (2 + 3) * (4 - 1) → 5 * 3 → 15
         let expr = Expr::BinOp(
-            Box::new(Expr::BinOp(Box::new(Expr::Lit(2.0)), BinOpKind::Add, Box::new(Expr::Lit(3.0)))),
+            Box::new(Expr::BinOp(
+                Box::new(Expr::Lit(2.0)),
+                BinOpKind::Add,
+                Box::new(Expr::Lit(3.0)),
+            )),
             BinOpKind::Mul,
-            Box::new(Expr::BinOp(Box::new(Expr::Lit(4.0)), BinOpKind::Sub, Box::new(Expr::Lit(1.0)))),
+            Box::new(Expr::BinOp(
+                Box::new(Expr::Lit(4.0)),
+                BinOpKind::Sub,
+                Box::new(Expr::Lit(1.0)),
+            )),
         );
         assert_eq!(optimize(&expr), Expr::Lit(15.0));
     }

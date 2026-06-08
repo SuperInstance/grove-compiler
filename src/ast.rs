@@ -7,8 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Binary operator kinds.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[derive(Copy)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
 pub enum BinOpKind {
     Add,
     Sub,
@@ -21,8 +20,7 @@ pub enum BinOpKind {
 }
 
 /// Unary operator kinds.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[derive(Copy)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
 pub enum UnaryKind {
     Neg,
     Not,
@@ -120,7 +118,11 @@ mod tests {
 
     #[test]
     fn expr_binop() {
-        let e = Expr::BinOp(Box::new(Expr::Lit(1.0)), BinOpKind::Add, Box::new(Expr::Lit(2.0)));
+        let e = Expr::BinOp(
+            Box::new(Expr::Lit(1.0)),
+            BinOpKind::Add,
+            Box::new(Expr::Lit(2.0)),
+        );
         if let Expr::BinOp(l, op, r) = e {
             assert_eq!(*l, Expr::Lit(1.0));
             assert_eq!(op, BinOpKind::Add);

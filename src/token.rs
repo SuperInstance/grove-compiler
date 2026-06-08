@@ -93,14 +93,38 @@ pub fn tokenize(source: &str) -> Vec<Token> {
                     _ => tokens.push(Token::Ident(ident)),
                 }
             }
-            '+' => { chars.next(); tokens.push(Token::Plus); }
-            '-' => { chars.next(); tokens.push(Token::Minus); }
-            '*' => { chars.next(); tokens.push(Token::Star); }
-            '/' => { chars.next(); tokens.push(Token::Slash); }
-            '(' => { chars.next(); tokens.push(Token::LParen); }
-            ')' => { chars.next(); tokens.push(Token::RParen); }
-            '?' => { chars.next(); tokens.push(Token::Question); }
-            ':' => { chars.next(); tokens.push(Token::Colon); }
+            '+' => {
+                chars.next();
+                tokens.push(Token::Plus);
+            }
+            '-' => {
+                chars.next();
+                tokens.push(Token::Minus);
+            }
+            '*' => {
+                chars.next();
+                tokens.push(Token::Star);
+            }
+            '/' => {
+                chars.next();
+                tokens.push(Token::Slash);
+            }
+            '(' => {
+                chars.next();
+                tokens.push(Token::LParen);
+            }
+            ')' => {
+                chars.next();
+                tokens.push(Token::RParen);
+            }
+            '?' => {
+                chars.next();
+                tokens.push(Token::Question);
+            }
+            ':' => {
+                chars.next();
+                tokens.push(Token::Colon);
+            }
             '=' => {
                 chars.next();
                 if chars.peek() == Some(&'=') {
@@ -119,8 +143,14 @@ pub fn tokenize(source: &str) -> Vec<Token> {
                     tokens.push(Token::Ident("§ERROR§unexpected '!'".into()));
                 }
             }
-            '<' => { chars.next(); tokens.push(Token::Lt); }
-            '>' => { chars.next(); tokens.push(Token::Gt); }
+            '<' => {
+                chars.next();
+                tokens.push(Token::Lt);
+            }
+            '>' => {
+                chars.next();
+                tokens.push(Token::Gt);
+            }
             _ => {
                 chars.next();
                 tokens.push(Token::Ident(format!("§ERROR§unexpected '{}'", ch)));

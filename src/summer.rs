@@ -54,7 +54,10 @@ impl TypeChecker {
                 }
             }
             Expr::Var(name) => {
-                let ty = self.env.iter().rev()
+                let ty = self
+                    .env
+                    .iter()
+                    .rev()
                     .find(|(n, _)| n == name)
                     .map(|(_, t)| t.clone())
                     .unwrap_or_else(|| {
@@ -172,14 +175,22 @@ mod tests {
 
     #[test]
     fn typecheck_binop_arithmetic() {
-        let expr = Expr::BinOp(Box::new(Expr::Lit(1.0)), BinOpKind::Add, Box::new(Expr::Lit(1.0)));
+        let expr = Expr::BinOp(
+            Box::new(Expr::Lit(1.0)),
+            BinOpKind::Add,
+            Box::new(Expr::Lit(1.0)),
+        );
         let result = typecheck(&expr);
         assert_eq!(result.typed.unwrap().ty, Type::Ternary);
     }
 
     #[test]
     fn typecheck_binop_comparison() {
-        let expr = Expr::BinOp(Box::new(Expr::Lit(5.0)), BinOpKind::Lt, Box::new(Expr::Lit(3.0)));
+        let expr = Expr::BinOp(
+            Box::new(Expr::Lit(5.0)),
+            BinOpKind::Lt,
+            Box::new(Expr::Lit(3.0)),
+        );
         let result = typecheck(&expr);
         assert_eq!(result.typed.unwrap().ty, Type::Bool);
     }
@@ -203,7 +214,11 @@ mod tests {
     #[test]
     fn typecheck_if_branches_match() {
         let expr = Expr::If(
-            Box::new(Expr::BinOp(Box::new(Expr::Lit(1.0)), BinOpKind::Eq, Box::new(Expr::Lit(1.0)))),
+            Box::new(Expr::BinOp(
+                Box::new(Expr::Lit(1.0)),
+                BinOpKind::Eq,
+                Box::new(Expr::Lit(1.0)),
+            )),
             Box::new(Expr::Lit(42.0)),
             Box::new(Expr::Lit(7.0)),
         );

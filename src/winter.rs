@@ -179,33 +179,52 @@ mod tests {
 
     #[test]
     fn compile_addition() {
-        let expr = Expr::BinOp(Box::new(Expr::Lit(1.0)), BinOpKind::Add, Box::new(Expr::Lit(2.0)));
+        let expr = Expr::BinOp(
+            Box::new(Expr::Lit(1.0)),
+            BinOpKind::Add,
+            Box::new(Expr::Lit(2.0)),
+        );
         let compiler = Compiler::new().compile(&expr);
-        assert_eq!(compiler.bytecode(), &[
-            Bytecode::Push(1.0),
-            Bytecode::Push(2.0),
-            Bytecode::Add,
-            Bytecode::Halt,
-        ]);
+        assert_eq!(
+            compiler.bytecode(),
+            &[
+                Bytecode::Push(1.0),
+                Bytecode::Push(2.0),
+                Bytecode::Add,
+                Bytecode::Halt,
+            ]
+        );
     }
 
     #[test]
     fn compile_subtraction() {
-        let expr = Expr::BinOp(Box::new(Expr::Lit(5.0)), BinOpKind::Sub, Box::new(Expr::Lit(3.0)));
+        let expr = Expr::BinOp(
+            Box::new(Expr::Lit(5.0)),
+            BinOpKind::Sub,
+            Box::new(Expr::Lit(3.0)),
+        );
         let compiler = Compiler::new().compile(&expr);
         assert_eq!(compiler.bytecode()[2], Bytecode::Sub);
     }
 
     #[test]
     fn compile_multiplication() {
-        let expr = Expr::BinOp(Box::new(Expr::Lit(4.0)), BinOpKind::Mul, Box::new(Expr::Lit(3.0)));
+        let expr = Expr::BinOp(
+            Box::new(Expr::Lit(4.0)),
+            BinOpKind::Mul,
+            Box::new(Expr::Lit(3.0)),
+        );
         let compiler = Compiler::new().compile(&expr);
         assert_eq!(compiler.bytecode()[2], Bytecode::Mul);
     }
 
     #[test]
     fn compile_division() {
-        let expr = Expr::BinOp(Box::new(Expr::Lit(10.0)), BinOpKind::Div, Box::new(Expr::Lit(2.0)));
+        let expr = Expr::BinOp(
+            Box::new(Expr::Lit(10.0)),
+            BinOpKind::Div,
+            Box::new(Expr::Lit(2.0)),
+        );
         let compiler = Compiler::new().compile(&expr);
         assert_eq!(compiler.bytecode()[2], Bytecode::Div);
     }
@@ -219,7 +238,11 @@ mod tests {
 
     #[test]
     fn compile_let_binding() {
-        let expr = Expr::Let("x".into(), Box::new(Expr::Lit(5.0)), Box::new(Expr::Var("x".into())));
+        let expr = Expr::Let(
+            "x".into(),
+            Box::new(Expr::Lit(5.0)),
+            Box::new(Expr::Var("x".into())),
+        );
         let compiler = Compiler::new().compile(&expr);
         assert_eq!(compiler.bytecode()[0], Bytecode::Push(5.0));
         assert_eq!(compiler.bytecode()[1], Bytecode::Store("x".into()));
@@ -261,7 +284,11 @@ mod tests {
 
     #[test]
     fn compile_constants_collected() {
-        let expr = Expr::BinOp(Box::new(Expr::Lit(1.0)), BinOpKind::Add, Box::new(Expr::Lit(2.0)));
+        let expr = Expr::BinOp(
+            Box::new(Expr::Lit(1.0)),
+            BinOpKind::Add,
+            Box::new(Expr::Lit(2.0)),
+        );
         let compiler = Compiler::new().compile(&expr);
         assert_eq!(compiler.constants, vec![1.0, 2.0]);
     }
