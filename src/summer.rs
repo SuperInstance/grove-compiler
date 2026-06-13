@@ -1,132 +1,232 @@
-use std::collections::HashSet;
+//! Summer — the type-checking season.
+//!
+//! The canopy thickens. Each tree in the grove is classified by its ecological
+//! niche: `Int` for the hardwoods of arithmetic, `Bool` for the deciduous
+//! branching logic, and `Ternary` for the rare {-1, 0, +1} undergrowth
+//! unique to the SuperInstance ecosystem. The type checker ensures every
+//! tree occupies its correct niche.
 
-use crate::ast::{BinOp, Expr, Program, Stmt};
-use crate::error::GroveError;
+use crate::ast::{BinOpKind, Expr, Type, TypedExpr, UnaryKind};
 
-/// Summer: type checker and scope validator.
-///
-/// Validates that all referenced variables are declared and that
-/// expression types are consistent.
-///
-/// Symbol table for tracking declared variables.
+/// Result of type-checking an expression.
 #[derive(Debug, Clone)]
-pub struct Scope {
-    vars: HashSet<String>,
+pub struct TypeCheckResult {
+    pub typed: Option<TypedExpr>,
+    pub errors: Vec<String>,
 }
 
-impl Scope {
+/// Type-check an expression, producing a typed AST or errors.
+pub fn typecheck(expr: &Expr) -> TypeCheckResult {
+    let mut checker = TypeChecker::new();
+    let typed = checker.check(expr);
+    TypeCheckResult {
+        typed: Some(typed),
+        errors: checker.errors,
+    }
+}
+
+struct TypeChecker {
+    errors: Vec<String>,
+    /// Variable type environment.
+    env: Vec<(String, Type)>,
+}
+
+impl TypeChecker {
     fn new() -> Self {
         Self {
-            vars: HashSet::new(),
+            errors: Vec::new(),
+            env: Vec::new(),
         }
     }
 
-    fn declare(&mut self, name: &str) {
-        self.vars.insert(name.to_string());
-    }
-
-    fn is_declared(&self, name: &str) -> bool {
-        self.vars.contains(name)
-    }
-}
-
-/// Type check a full program.
-pub fn summer(program: &Program) -> Result<(), GroveError> {
-    let mut scope = Scope::new();
-    for stmt in &program.stmts {
-        check_stmt(stmt, &mut scope)?;
-    }
-    Ok(())
-}
-
-fn check_stmt(stmt: &Stmt, scope: &mut Scope) -> Result<(), GroveError> {
-    match stmt {
-        Stmt::Let(name, expr) => {
-            check_expr(expr, scope)?;
-            scope.declare(name);
-            Ok(())
-        }
-        Stmt::Assign(name, expr) => {
-            if !scope.is_declared(name) {
-                return Err(GroveError::TypeCheck {
-                    message: format!("undefined variable: {name}"),
-                });
-            }
-            check_expr(expr, scope)
-        }
-        Stmt::If(cond, then_branch, else_branch) => {
-            check_expr(cond, scope)?;
-            let mut inner = scope.clone();
-            for s in then_branch {
-                check_stmt(s, &mut inner)?;
-            }
-            for s in else_branch {
-                check_stmt(s, &mut inner)?;
-            }
-            Ok(())
-        }
-        Stmt::Return(expr) => check_expr(expr, scope),
-        Stmt::Expr(expr) => check_expr(expr, scope),
-    }
-}
-
-fn check_expr(expr: &Expr, scope: &Scope) -> Result<(), GroveError> {
-    match expr {
-        Expr::Literal(_) => Ok(()),
-        Expr::Var(name) => {
-            if scope.is_declared(name) {
-                Ok(())
-            } else {
-                Err(GroveError::TypeCheck {
-                    message: format!("undefined variable: {name}"),
-                })
-            }
-        }
-        Expr::Binary(left, _op, right) => {
-            check_expr(left, scope)?;
-            check_expr(right, scope)
-        }
-        Expr::Unary(_, e) => check_expr(e, scope),
-        Expr::If(cond, then_e, else_e) => {
-            check_expr(cond, scope)?;
-            check_expr(then_e, scope)?;
-            check_expr(else_e, scope)
-        }
-        Expr::Call(_name, args) => {
-            for arg in args {
-                check_expr(arg, scope)?;
-            }
-            Ok(())
-        }
-    }
-}
-
-/// Constant-evaluate an expression if possible.
-pub fn const_eval(expr: &Expr) -> Option<f64> {
-    match expr {
-        Expr::Literal(n) => Some(*n),
-        Expr::Binary(l, op, r) => {
-            let lv = const_eval(l)?;
-            let rv = const_eval(r)?;
-            Some(match op {
-                BinOp::Add => lv + rv,
-                BinOp::Sub => lv - rv,
-                BinOp::Mul => lv * rv,
-                BinOp::Div => {
-                    if rv == 0.0 {
-                        return None;
-                    }
-                    lv / rv
+    fn check(&mut self, expr: &Expr) -> TypedExpr {
+        match expr {
+            Expr::Lit(n) => {
+                // Check for exact ternary values {-1, 0, +1}
+                let ty = if *n == -1.0 || *n == 0.0 || *n == 1.0 {
+                    Type::Ternary
+                } else {
+                    Type::Int
+                };
+                TypedExpr {
+                    expr: expr.clone(),
+                    ty,
                 }
-                BinOp::Eq => f64::from((lv == rv) as u8),
-                BinOp::Neq => f64::from((lv != rv) as u8),
-                BinOp::Lt => f64::from((lv < rv) as u8),
-                BinOp::Gt => f64::from((lv > rv) as u8),
-                BinOp::Le => f64::from((lv <= rv) as u8),
-                BinOp::Ge => f64::from((lv >= rv) as u8),
-            })
+            }
+            Expr::Var(name) => {
+                let ty = self.env.iter().rev()
+                    .find(|(n, _)| n == name)
+                    .map(|(_, t)| t.clone())
+                    .unwrap_or_else(|| {
+                        self.errors.push(format!("undefined variable: {}", name));
+                        Type::Int
+                    });
+                TypedExpr {
+                    expr: expr.clone(),
+                    ty,
+                }
+            }
+            Expr::BinOp(left, op, right) => {
+                let left_typed = self.check(left);
+                let right_typed = self.check(right);
+                let ty = match op {
+                    BinOpKind::Add | BinOpKind::Sub | BinOpKind::Mul | BinOpKind::Div => {
+                        if left_typed.ty == Type::Ternary && right_typed.ty == Type::Ternary {
+                            Type::Ternary
+                        } else {
+                            Type::Int
+                        }
+                    }
+                    BinOpKind::Eq | BinOpKind::Neq | BinOpKind::Lt | BinOpKind::Gt => Type::Bool,
+                };
+                TypedExpr {
+                    expr: expr.clone(),
+                    ty,
+                }
+            }
+            Expr::Unary(kind, operand) => {
+                let operand_typed = self.check(operand);
+                let ty = match kind {
+                    UnaryKind::Neg => operand_typed.ty.clone(),
+                    UnaryKind::Not => Type::Bool,
+                };
+                TypedExpr {
+                    expr: expr.clone(),
+                    ty,
+                }
+            }
+            Expr::If(cond, then_expr, else_expr) => {
+                let cond_typed = self.check(cond);
+                let then_typed = self.check(then_expr);
+                let else_typed = self.check(else_expr);
+                if cond_typed.ty != Type::Bool && cond_typed.ty != Type::Ternary {
+                    self.errors.push(format!(
+                        "if condition must be Bool or Ternary, got {}",
+                        cond_typed.ty
+                    ));
+                }
+                let ty = if then_typed.ty == else_typed.ty {
+                    then_typed.ty.clone()
+                } else {
+                    self.errors.push(format!(
+                        "if branches have mismatched types: {} vs {}",
+                        then_typed.ty, else_typed.ty
+                    ));
+                    then_typed.ty.clone()
+                };
+                TypedExpr {
+                    expr: expr.clone(),
+                    ty,
+                }
+            }
+            Expr::Let(name, value, body) => {
+                let value_typed = self.check(value);
+                self.env.push((name.clone(), value_typed.ty.clone()));
+                let body_typed = self.check(body);
+                self.env.pop();
+                TypedExpr {
+                    expr: expr.clone(),
+                    ty: body_typed.ty,
+                }
+            }
+            Expr::Ternary(cond, then_expr, else_expr) => {
+                let cond_typed = self.check(cond);
+                let then_typed = self.check(then_expr);
+                let else_typed = self.check(else_expr);
+                let ty = if then_typed.ty == else_typed.ty {
+                    then_typed.ty.clone()
+                } else {
+                    Type::Int
+                };
+                let _ = (cond_typed, cond);
+                TypedExpr {
+                    expr: expr.clone(),
+                    ty,
+                }
+            }
         }
-        Expr::Unary(crate::ast::UnOp::Neg, e) => Some(-const_eval(e)?),
-        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn typecheck_literal_int() {
+        let result = typecheck(&Expr::Lit(42.0));
+        assert_eq!(result.typed.unwrap().ty, Type::Int);
+    }
+
+    #[test]
+    fn typecheck_literal_ternary() {
+        let result = typecheck(&Expr::Lit(1.0));
+        assert_eq!(result.typed.unwrap().ty, Type::Ternary);
+    }
+
+    #[test]
+    fn typecheck_literal_neg_one() {
+        let result = typecheck(&Expr::Lit(-1.0));
+        assert_eq!(result.typed.unwrap().ty, Type::Ternary);
+    }
+
+    #[test]
+    fn typecheck_binop_arithmetic() {
+        let expr = Expr::BinOp(Box::new(Expr::Lit(1.0)), BinOpKind::Add, Box::new(Expr::Lit(1.0)));
+        let result = typecheck(&expr);
+        assert_eq!(result.typed.unwrap().ty, Type::Ternary);
+    }
+
+    #[test]
+    fn typecheck_binop_comparison() {
+        let expr = Expr::BinOp(Box::new(Expr::Lit(5.0)), BinOpKind::Lt, Box::new(Expr::Lit(3.0)));
+        let result = typecheck(&expr);
+        assert_eq!(result.typed.unwrap().ty, Type::Bool);
+    }
+
+    #[test]
+    fn typecheck_let_inference() {
+        // let x = 42 in x + 1
+        let expr = Expr::Let(
+            "x".into(),
+            Box::new(Expr::Lit(42.0)),
+            Box::new(Expr::BinOp(
+                Box::new(Expr::Var("x".into())),
+                BinOpKind::Add,
+                Box::new(Expr::Lit(1.0)),
+            )),
+        );
+        let result = typecheck(&expr);
+        assert_eq!(result.typed.unwrap().ty, Type::Int);
+    }
+
+    #[test]
+    fn typecheck_if_branches_match() {
+        let expr = Expr::If(
+            Box::new(Expr::BinOp(Box::new(Expr::Lit(1.0)), BinOpKind::Eq, Box::new(Expr::Lit(1.0)))),
+            Box::new(Expr::Lit(42.0)),
+            Box::new(Expr::Lit(7.0)),
+        );
+        let result = typecheck(&expr);
+        assert_eq!(result.typed.unwrap().ty, Type::Int);
+        assert!(result.errors.is_empty());
+    }
+
+    #[test]
+    fn typecheck_undefined_var() {
+        let expr = Expr::Var("undefined_var".into());
+        let result = typecheck(&expr);
+        assert!(!result.errors.is_empty());
+    }
+
+    #[test]
+    fn typecheck_ternary_expr() {
+        let expr = Expr::Ternary(
+            Box::new(Expr::Lit(1.0)),
+            Box::new(Expr::Lit(1.0)),
+            Box::new(Expr::Lit(-1.0)),
+        );
+        let result = typecheck(&expr);
+        assert_eq!(result.typed.unwrap().ty, Type::Ternary);
     }
 }

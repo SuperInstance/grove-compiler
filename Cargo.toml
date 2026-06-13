@@ -2,10 +2,14 @@
 name = "grove-compiler"
 version = "0.1.0"
 edition = "2021"
-description = "Season-based compiler pipeline with ternary bytecode — Spring→Summer→Autumn→Winter"
+description = "A tree-based compiler for the SuperInstance ecosystem — AST as a grove of trees, type checking as ecological niche verification, and code generation as harvest season."
 license = "MIT"
 repository = "https://github.com/SuperInstance/grove-compiler"
-keywords = ["compiler", "ternary", "bytecode", "parser", "seasons"]
+keywords = ["compiler", "ternary", "ast", "bytecode", "superinstance"]
+categories = ["compilers"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"

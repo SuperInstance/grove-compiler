@@ -1,174 +1,45 @@
-use crate::ast::{BinOp, Expr, Program, Stmt, UnOp};
-use crate::error::GroveError;
-use crate::token::Token;
+//! Spring — the parsing season.
+//!
+//! Seeds (tokens) germinate into saplings (AST nodes). The parser performs
+//! recursive descent through the token stream, growing a grove of expression
+//! trees. Errors are captured as spanning diagnostics so the gardener knows
+//! exactly where the frost struck.
 
-// Spring: Lexer + Parser.
-//
-// The lexer tokenizes input text; the parser builds an AST.
+use crate::ast::{BinOpKind, Diagnostic, Expr, UnaryKind};
+use crate::token::{Token, tokenize};
 
-// ── Lexer ──────────────────────────────────────────────────────────────────
-
-/// Lexer: converts source text into a token stream.
-pub struct Lexer {
-    chars: Vec<char>,
-    pos: usize,
+/// A parsed AST plus any diagnostics accumulated during the spring parse.
+#[derive(Debug, Clone)]
+pub struct ParseResult {
+    pub expr: Option<Expr>,
+    pub diagnostics: Vec<Diagnostic>,
 }
 
-impl Lexer {
-    /// Create a new lexer for the given source text.
-    pub fn new(input: &str) -> Self {
+/// Parse a source string into an AST.
+pub fn parse(source: &str) -> ParseResult {
+    let tokens = tokenize(source);
+    let mut parser = Parser::new(&tokens);
+    let expr = parser.parse_expr();
+    let diagnostics = parser.diagnostics;
+    ParseResult {
+        expr: Some(expr),
+        diagnostics,
+    }
+}
+
+struct Parser<'a> {
+    tokens: &'a [Token],
+    pos: usize,
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl<'a> Parser<'a> {
+    fn new(tokens: &'a [Token]) -> Self {
         Self {
-            chars: input.chars().collect(),
+            tokens,
             pos: 0,
+            diagnostics: Vec::new(),
         }
-    }
-
-    fn peek(&self) -> Option<char> {
-        self.chars.get(self.pos).copied()
-    }
-
-    fn advance(&mut self) -> Option<char> {
-        let ch = self.chars.get(self.pos).copied();
-        if ch.is_some() {
-            self.pos += 1;
-        }
-        ch
-    }
-
-    fn skip_whitespace(&mut self) {
-        while let Some(ch) = self.peek() {
-            if ch.is_whitespace() {
-                self.advance();
-            } else {
-                break;
-            }
-        }
-    }
-
-    fn read_number(&mut self) -> Token {
-        let start = self.pos;
-        while let Some(ch) = self.peek() {
-            if ch.is_ascii_digit() || ch == '.' {
-                self.advance();
-            } else {
-                break;
-            }
-        }
-        let s: String = self.chars[start..self.pos].iter().collect();
-        Token::Number(s.parse::<f64>().unwrap_or(0.0))
-    }
-
-    fn read_ident(&mut self) -> String {
-        let start = self.pos;
-        while let Some(ch) = self.peek() {
-            if ch.is_alphanumeric() || ch == '_' {
-                self.advance();
-            } else {
-                break;
-            }
-        }
-        self.chars[start..self.pos].iter().collect()
-    }
-
-    /// Lex the entire input into a token vector.
-    pub fn tokenize(&mut self) -> Result<Vec<Token>, GroveError> {
-        let mut tokens = Vec::new();
-        loop {
-            self.skip_whitespace();
-            match self.peek() {
-                None => {
-                    tokens.push(Token::Eof);
-                    return Ok(tokens);
-                }
-                Some(ch) => {
-                    let tok = match ch {
-                        '0'..='9' => self.read_number(),
-                        'a'..='z' | 'A'..='Z' | '_' => {
-                            let word = self.read_ident();
-                            match word.as_str() {
-                                "let" => Token::Let,
-                                "if" => Token::If,
-                                "else" => Token::Else,
-                                "fn" => Token::Fn,
-                                "return" => Token::Return,
-                                _ => Token::Ident(word),
-                            }
-                        }
-                        '+' => { self.advance(); Token::Plus }
-                        '-' => { self.advance(); Token::Minus }
-                        '*' => { self.advance(); Token::Star }
-                        '/' => { self.advance(); Token::Slash }
-                        '(' => { self.advance(); Token::LParen }
-                        ')' => { self.advance(); Token::RParen }
-                        '{' => { self.advance(); Token::LBrace }
-                        '}' => { self.advance(); Token::RBrace }
-                        ';' => { self.advance(); Token::Semicolon }
-                        ',' => { self.advance(); Token::Comma }
-                        '=' => {
-                            self.advance();
-                            if self.peek() == Some('=') {
-                                self.advance();
-                                Token::Eq
-                            } else {
-                                Token::Assign
-                            }
-                        }
-                        '!' => {
-                            self.advance();
-                            if self.peek() == Some('=') {
-                                self.advance();
-                                Token::Neq
-                            } else {
-                                return Err(GroveError::Lex {
-                                    message: "expected '=' after '!'".into(),
-                                    pos: self.pos,
-                                });
-                            }
-                        }
-                        '<' => {
-                            self.advance();
-                            if self.peek() == Some('=') {
-                                self.advance();
-                                Token::Le
-                            } else {
-                                Token::Lt
-                            }
-                        }
-                        '>' => {
-                            self.advance();
-                            if self.peek() == Some('=') {
-                                self.advance();
-                                Token::Ge
-                            } else {
-                                Token::Gt
-                            }
-                        }
-                        _ => {
-                            return Err(GroveError::Lex {
-                                message: format!("unexpected character: {ch}"),
-                                pos: self.pos,
-                            });
-                        }
-                    };
-                    tokens.push(tok);
-                }
-            }
-        }
-    }
-}
-
-// ── Parser ─────────────────────────────────────────────────────────────────
-
-/// Parser: recursive-descent parser producing an AST.
-pub struct Parser {
-    tokens: Vec<Token>,
-    pos: usize,
-}
-
-impl Parser {
-    /// Create a new parser from a token stream.
-    pub fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, pos: 0 }
     }
 
     fn peek(&self) -> &Token {
@@ -181,259 +52,278 @@ impl Parser {
         tok
     }
 
-    fn expect(&mut self, expected: &Token) -> Result<(), GroveError> {
-        let tok = self.advance();
-        if tok == *expected {
-            Ok(())
+    fn expect(&mut self, expected: &Token) -> bool {
+        if self.peek() == expected {
+            self.advance();
+            true
         } else {
-            Err(GroveError::Parse {
-                message: format!("expected {}, got {}", expected.name(), tok.name()),
-                pos: self.pos,
-            })
+            self.diagnostics.push(Diagnostic::new(
+                format!("expected {:?}, found {:?}", expected, self.peek()),
+                self.pos,
+                self.pos + 1,
+            ));
+            false
         }
     }
 
-    /// Parse a full program.
-    pub fn parse_program(&mut self) -> Result<Program, GroveError> {
-        let mut stmts = Vec::new();
-        while *self.peek() != Token::Eof {
-            stmts.push(self.parse_stmt()?);
-        }
-        Ok(Program { stmts })
+    fn parse_expr(&mut self) -> Expr {
+        self.parse_ternary()
     }
 
-    fn parse_stmt(&mut self) -> Result<Stmt, GroveError> {
-        match self.peek().clone() {
-            Token::Let => self.parse_let(),
-            Token::If => self.parse_if_stmt(),
-            Token::Return => self.parse_return(),
-            Token::Ident(_) => {
-                // Could be assignment or expression statement
-                let pos = self.pos;
-                let name_tok = self.advance();
-                if let Token::Ident(name) = name_tok {
-                    if *self.peek() == Token::Assign {
-                        self.advance();
-                        let expr = self.parse_expr()?;
-                        self.expect(&Token::Semicolon)?;
-                        Ok(Stmt::Assign(name, expr))
-                    } else {
-                        // rewind and parse as expression
-                        self.pos = pos;
-                        let expr = self.parse_expr()?;
-                        self.expect(&Token::Semicolon)?;
-                        Ok(Stmt::Expr(expr))
-                    }
-                } else {
-                    unreachable!()
+    fn parse_ternary(&mut self) -> Expr {
+        let expr = self.parse_comparison();
+        if matches!(self.peek(), Token::Question) {
+            self.advance();
+            let then_expr = self.parse_expr();
+            self.expect(&Token::Colon);
+            let else_expr = self.parse_expr();
+            Expr::Ternary(Box::new(expr), Box::new(then_expr), Box::new(else_expr))
+        } else {
+            expr
+        }
+    }
+
+    fn parse_comparison(&mut self) -> Expr {
+        let left = self.parse_addition();
+        match self.peek() {
+            Token::Eq => {
+                self.advance();
+                let right = self.parse_addition();
+                Expr::BinOp(Box::new(left), BinOpKind::Eq, Box::new(right))
+            }
+            Token::Neq => {
+                self.advance();
+                let right = self.parse_addition();
+                Expr::BinOp(Box::new(left), BinOpKind::Neq, Box::new(right))
+            }
+            Token::Lt => {
+                self.advance();
+                let right = self.parse_addition();
+                Expr::BinOp(Box::new(left), BinOpKind::Lt, Box::new(right))
+            }
+            Token::Gt => {
+                self.advance();
+                let right = self.parse_addition();
+                Expr::BinOp(Box::new(left), BinOpKind::Gt, Box::new(right))
+            }
+            _ => left,
+        }
+    }
+
+    fn parse_addition(&mut self) -> Expr {
+        let mut left = self.parse_multiplication();
+        loop {
+            match self.peek() {
+                Token::Plus => {
+                    self.advance();
+                    let right = self.parse_multiplication();
+                    left = Expr::BinOp(Box::new(left), BinOpKind::Add, Box::new(right));
                 }
-            }
-            _ => {
-                let expr = self.parse_expr()?;
-                self.expect(&Token::Semicolon)?;
-                Ok(Stmt::Expr(expr))
+                Token::Minus => {
+                    self.advance();
+                    let right = self.parse_multiplication();
+                    left = Expr::BinOp(Box::new(left), BinOpKind::Sub, Box::new(right));
+                }
+                _ => break,
             }
         }
+        left
     }
 
-    fn parse_let(&mut self) -> Result<Stmt, GroveError> {
-        self.advance(); // consume 'let'
-        let name = match self.advance() {
-            Token::Ident(s) => s,
-            tok => {
-                return Err(GroveError::Parse {
-                    message: format!("expected identifier, got {}", tok.name()),
-                    pos: self.pos,
-                })
+    fn parse_multiplication(&mut self) -> Expr {
+        let mut left = self.parse_unary();
+        loop {
+            match self.peek() {
+                Token::Star => {
+                    self.advance();
+                    let right = self.parse_unary();
+                    left = Expr::BinOp(Box::new(left), BinOpKind::Mul, Box::new(right));
+                }
+                Token::Slash => {
+                    self.advance();
+                    let right = self.parse_unary();
+                    left = Expr::BinOp(Box::new(left), BinOpKind::Div, Box::new(right));
+                }
+                _ => break,
             }
-        };
-        self.expect(&Token::Assign)?;
-        let expr = self.parse_expr()?;
-        self.expect(&Token::Semicolon)?;
-        Ok(Stmt::Let(name, expr))
-    }
-
-    fn parse_if_stmt(&mut self) -> Result<Stmt, GroveError> {
-        self.advance(); // consume 'if'
-        let cond = self.parse_expr()?;
-        self.expect(&Token::LBrace)?;
-        let then_branch = self.parse_block()?;
-        self.expect(&Token::RBrace)?;
-        let else_branch = if *self.peek() == Token::Else {
-            self.advance();
-            if *self.peek() == Token::If {
-                // else if
-                let stmt = self.parse_if_stmt()?;
-                vec![stmt]
-            } else {
-                self.expect(&Token::LBrace)?;
-                let stmts = self.parse_block()?;
-                self.expect(&Token::RBrace)?;
-                stmts
-            }
-        } else {
-            vec![]
-        };
-        Ok(Stmt::If(cond, then_branch, else_branch))
-    }
-
-    fn parse_return(&mut self) -> Result<Stmt, GroveError> {
-        self.advance(); // consume 'return'
-        let expr = self.parse_expr()?;
-        self.expect(&Token::Semicolon)?;
-        Ok(Stmt::Return(expr))
-    }
-
-    fn parse_block(&mut self) -> Result<Vec<Stmt>, GroveError> {
-        let mut stmts = Vec::new();
-        while *self.peek() != Token::RBrace && *self.peek() != Token::Eof {
-            stmts.push(self.parse_stmt()?);
         }
-        Ok(stmts)
+        left
     }
 
-    // Expression parsing with precedence climbing
-
-    fn parse_expr(&mut self) -> Result<Expr, GroveError> {
-        self.parse_comparison()
-    }
-
-    fn parse_comparison(&mut self) -> Result<Expr, GroveError> {
-        let mut left = self.parse_addition()?;
-        while let Some(op) = BinOp::from_token(self.peek()) {
-            if matches!(op, BinOp::Eq | BinOp::Neq | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge) {
+    fn parse_unary(&mut self) -> Expr {
+        match self.peek() {
+            Token::Minus => {
                 self.advance();
-                let right = self.parse_addition()?;
-                left = Expr::Binary(Box::new(left), op, Box::new(right));
-            } else {
-                break;
+                let expr = self.parse_unary();
+                Expr::Unary(UnaryKind::Neg, Box::new(expr))
             }
-        }
-        Ok(left)
-    }
-
-    fn parse_addition(&mut self) -> Result<Expr, GroveError> {
-        let mut left = self.parse_multiplication()?;
-        loop {
-            let op = match self.peek() {
-                Token::Plus => BinOp::Add,
-                Token::Minus => BinOp::Sub,
-                _ => break,
-            };
-            self.advance();
-            let right = self.parse_multiplication()?;
-            left = Expr::Binary(Box::new(left), op, Box::new(right));
-        }
-        Ok(left)
-    }
-
-    fn parse_multiplication(&mut self) -> Result<Expr, GroveError> {
-        let mut left = self.parse_unary()?;
-        loop {
-            let op = match self.peek() {
-                Token::Star => BinOp::Mul,
-                Token::Slash => BinOp::Div,
-                _ => break,
-            };
-            self.advance();
-            let right = self.parse_unary()?;
-            left = Expr::Binary(Box::new(left), op, Box::new(right));
-        }
-        Ok(left)
-    }
-
-    fn parse_unary(&mut self) -> Result<Expr, GroveError> {
-        if *self.peek() == Token::Minus {
-            self.advance();
-            let expr = self.parse_unary()?;
-            Ok(Expr::Unary(UnOp::Neg, Box::new(expr)))
-        } else {
-            self.parse_primary()
+            _ => self.parse_primary(),
         }
     }
 
-    fn parse_primary(&mut self) -> Result<Expr, GroveError> {
+    fn parse_primary(&mut self) -> Expr {
         match self.peek().clone() {
-            Token::Number(n) => {
+            Token::Num(n) => {
                 self.advance();
-                Ok(Expr::Literal(n))
+                Expr::Lit(n)
             }
             Token::Ident(name) => {
                 self.advance();
-                if *self.peek() == Token::LParen {
-                    self.advance();
-                    let mut args = Vec::new();
-                    if *self.peek() != Token::RParen {
-                        args.push(self.parse_expr()?);
-                        while *self.peek() == Token::Comma {
-                            self.advance();
-                            args.push(self.parse_expr()?);
-                        }
-                    }
-                    self.expect(&Token::RParen)?;
-                    Ok(Expr::Call(name, args))
-                } else {
-                    Ok(Expr::Var(name))
-                }
+                Expr::Var(name)
             }
             Token::LParen => {
                 self.advance();
-                let expr = self.parse_expr()?;
-                self.expect(&Token::RParen)?;
-                Ok(expr)
+                let expr = self.parse_expr();
+                self.expect(&Token::RParen);
+                expr
             }
-            Token::If => self.parse_if_expr(),
-            tok => Err(GroveError::Parse {
-                message: format!("unexpected token in expression: {}", tok.name()),
-                pos: self.pos,
-            }),
-        }
-    }
-
-    fn parse_if_expr(&mut self) -> Result<Expr, GroveError> {
-        self.advance(); // consume 'if'
-        let cond = self.parse_expr()?;
-        self.expect(&Token::LBrace)?;
-        let then_block = self.parse_block()?;
-        self.expect(&Token::RBrace)?;
-        let then_expr = if then_block.len() == 1 {
-            match &then_block[0] {
-                Stmt::Expr(e) => e.clone(),
-                Stmt::Return(e) => e.clone(),
-                _ => Expr::Literal(0.0),
-            }
-        } else {
-            Expr::Literal(0.0)
-        };
-        let else_expr = if *self.peek() == Token::Else {
-            self.advance();
-            if *self.peek() == Token::LBrace {
+            Token::If => {
                 self.advance();
-                let else_block = self.parse_block()?;
-                self.expect(&Token::RBrace)?;
-                if else_block.len() == 1 {
-                    match &else_block[0] {
-                        Stmt::Expr(e) => e.clone(),
-                        Stmt::Return(e) => e.clone(),
-                        _ => Expr::Literal(0.0),
-                    }
-                } else {
-                    Expr::Literal(0.0)
-                }
-            } else if *self.peek() == Token::If {
-                self.parse_if_expr()?
-            } else {
-                Expr::Literal(0.0)
+                let cond = self.parse_expr();
+                let then_expr = self.parse_expr();
+                self.expect(&Token::Else);
+                let else_expr = self.parse_expr();
+                Expr::If(Box::new(cond), Box::new(then_expr), Box::new(else_expr))
             }
-        } else {
-            Expr::Literal(0.0)
-        };
-        Ok(Expr::If(Box::new(cond), Box::new(then_expr), Box::new(else_expr)))
+            Token::Let => {
+                self.advance();
+                let name = match self.advance() {
+                    Token::Ident(n) => n,
+                    other => {
+                        self.diagnostics.push(Diagnostic::new(
+                            format!("expected identifier after 'let', found {:?}", other),
+                            self.pos,
+                            self.pos + 1,
+                        ));
+                        String::from("_err")
+                    }
+                };
+                self.expect(&Token::Assign);
+                let value = self.parse_expr();
+                let body = self.parse_expr();
+                Expr::Let(name, Box::new(value), Box::new(body))
+            }
+            other => {
+                self.diagnostics.push(Diagnostic::new(
+                    format!("unexpected token: {:?}", other),
+                    self.pos,
+                    self.pos + 1,
+                ));
+                self.advance();
+                Expr::Lit(0.0)
+            }
+        }
     }
 }
 
-/// Convenience: lex + parse a string into a Program.
-pub fn spring(source: &str) -> Result<Program, GroveError> {
-    let tokens = Lexer::new(source).tokenize()?;
-    Parser::new(tokens).parse_program()
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_number() {
+        let result = parse("42");
+        assert_eq!(result.expr, Some(Expr::Lit(42.0)));
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn parse_addition() {
+        let result = parse("1 + 2");
+        let expected = Expr::BinOp(
+            Box::new(Expr::Lit(1.0)),
+            BinOpKind::Add,
+            Box::new(Expr::Lit(2.0)),
+        );
+        assert_eq!(result.expr, Some(expected));
+    }
+
+    #[test]
+    fn parse_multiplication_precedence() {
+        let result = parse("1 + 2 * 3");
+        // Should be 1 + (2 * 3)
+        let expected = Expr::BinOp(
+            Box::new(Expr::Lit(1.0)),
+            BinOpKind::Add,
+            Box::new(Expr::BinOp(
+                Box::new(Expr::Lit(2.0)),
+                BinOpKind::Mul,
+                Box::new(Expr::Lit(3.0)),
+            )),
+        );
+        assert_eq!(result.expr, Some(expected));
+    }
+
+    #[test]
+    fn parse_parenthesized() {
+        let result = parse("(1 + 2) * 3");
+        let expected = Expr::BinOp(
+            Box::new(Expr::BinOp(
+                Box::new(Expr::Lit(1.0)),
+                BinOpKind::Add,
+                Box::new(Expr::Lit(2.0)),
+            )),
+            BinOpKind::Mul,
+            Box::new(Expr::Lit(3.0)),
+        );
+        assert_eq!(result.expr, Some(expected));
+    }
+
+    #[test]
+    fn parse_unary_negation() {
+        let result = parse("-5");
+        let expected = Expr::Unary(UnaryKind::Neg, Box::new(Expr::Lit(5.0)));
+        assert_eq!(result.expr, Some(expected));
+    }
+
+    #[test]
+    fn parse_ternary() {
+        let result = parse("1 ? 2 : 3");
+        let expected = Expr::Ternary(
+            Box::new(Expr::Lit(1.0)),
+            Box::new(Expr::Lit(2.0)),
+            Box::new(Expr::Lit(3.0)),
+        );
+        assert_eq!(result.expr, Some(expected));
+    }
+
+    #[test]
+    fn parse_if_else() {
+        let result = parse("if 1 2 else 3");
+        let expected = Expr::If(
+            Box::new(Expr::Lit(1.0)),
+            Box::new(Expr::Lit(2.0)),
+            Box::new(Expr::Lit(3.0)),
+        );
+        assert_eq!(result.expr, Some(expected));
+    }
+
+    #[test]
+    fn parse_let_binding() {
+        let result = parse("let x = 5 x");
+        let expected = Expr::Let(
+            "x".into(),
+            Box::new(Expr::Lit(5.0)),
+            Box::new(Expr::Var("x".into())),
+        );
+        assert_eq!(result.expr, Some(expected));
+    }
+
+    #[test]
+    fn parse_comparison() {
+        let result = parse("1 == 2");
+        let expected = Expr::BinOp(
+            Box::new(Expr::Lit(1.0)),
+            BinOpKind::Eq,
+            Box::new(Expr::Lit(2.0)),
+        );
+        assert_eq!(result.expr, Some(expected));
+    }
+
+    #[test]
+    fn parse_complex_expression() {
+        let result = parse("let x = 3 + 4 x * 2");
+        assert!(result.diagnostics.is_empty());
+        assert!(result.expr.is_some());
+    }
 }

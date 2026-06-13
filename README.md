@@ -1,131 +1,178 @@
-# grove-compiler
+# 🌳 Grove Compiler
 
-[![crates.io](https://img.shields.io/crates/v/grove-compiler.svg)](https://crates.io/crates/grove-compiler)
-[![docs.rs](https://docs.rs/grove-compiler/badge.svg)](https://docs.rs/grove-compiler)
-[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+*A tree-based compiler for the [SuperInstance](https://github.com/SuperInstance) ecosystem.*
 
-## The Idea
+**The forest is the program. The seasons are the compiler passes.**
 
-A compiler pipeline has four natural phases: parse, validate, optimize, emit. These map cleanly to the four seasons. Spring brings new life (tokens become an AST). Summer is growth and checking (type validation, scope resolution). Autumn strips away the unnecessary (dead code, constant folding). Winter crystallizes what remains (bytecode emission).
+---
 
-The emitted bytecode is **balanced ternary** — digits {-1, 0, +1}, written as `Trit::Neg`, `Trit::Zero`, `Trit::Pos`. Why ternary? Because agent instructions in the SuperInstance fleet encode as ternary states: {-1, 0, +1} maps naturally to {inhibit, idle, activate}. Three-state logic is more expressive than binary and more compact than decimal.
+## The Seasons of Compilation
 
-## The Language
+Grove Compiler doesn't just compile — it grows. Every source file is a seed that journeys through four seasons before becoming bytecode:
 
-A small expression language with:
-- **Arithmetic**: `+`, `-`, `*`, `/`
-- **Variables**: `let x = expr;`
-- **Conditionals**: `if expr { ... } else { ... }`
-- **Functions**: `fn name(args) { ... }`
-- **Comparisons**: `==`, `!=`, `<`, `>`, `<=`, `>=`
+### 🌱 Spring — Parsing
 
-Example program:
+Seeds germinate. The tokenizer cracks open raw source text into tokens, and the recursive descent parser weaves them into a living grove of AST trees. Saplings emerge: literals, variables, binary operations, if-else branches, let bindings, ternary expressions.
 
 ```
-let tempo = 120;
-let beat = 1 / tempo * 60;
-let pattern = if beat > 0.5 { 1 } else { 0 };
+source text → tokens → AST (a grove of expression trees)
 ```
 
-## The Four Seasons
+Error recovery spans the frost-damaged regions with diagnostic precision, so the gardener knows exactly where the cold struck.
 
-### Spring: Lexing + Parsing
+### ☀️ Summer — Type Checking
+
+The canopy thickens. Each tree in the grove is classified by its **ecological niche**:
+
+- **`Int`** — The hardwoods of arithmetic. Sturdy, numeric, reliable.
+- **`Bool`** — The deciduous branching logic. True or false, leaf or bare.
+- **`Ternary`** — The rare {-1, 0, +1} undergrowth, unique to the SuperInstance ecosystem.
+
+The type checker walks the grove verifying that every tree occupies its correct niche. Variable bindings are inferred — no explicit annotations needed. Branches must match their types; mismatched canopies are flagged.
+
+### 🍂 Autumn — Optimization
+
+Leaves fall. Deadwood is cleared. The grove is pruned for the lean months ahead.
+
+- **Constant folding** — Ripe expressions (`2 + 3`) are harvested into their values (`5`).
+- **Dead code elimination** — Unreachable branches wither away. Unused let bindings decompose.
+- **Ternary simplification** — The undergrowth reshapes itself: `Pos + Pos → Neg` under ternary arithmetic, because in the SuperInstance ecosystem, growth cycles back on itself (`1 + 1 ≡ -1 mod 3`).
+
+### ❄️ Winter — Code Generation
+
+The harvest is collected. The grove's fully grown and optimized trees are felled and milled into **bytecode** — stack-machine instructions ready for the virtual machine.
+
+```
+AST → Push, Add, Sub, Mul, Div, Jump, JumpIfZero, Load, Store, Halt
+```
+
+Each expression becomes a sequence of pushes, operations, jumps, and stores: the lumber of computation. A constant pool is gathered alongside for efficient lookup.
+
+---
+
+## Quick Start
 
 ```rust
-use grove_compiler::spring::{Lexer, Parser};
+use grove_compiler::{compile, tokenize, parse, typecheck, optimize, Compiler};
 
-let tokens = Lexer::new("let x = 2 + 3;").tokenize();
-let ast = Parser::new(tokens).parse_program();
-// ast = [Stmt::Let("x", Expr::Binary(2, Add, 3))]
-```
+// Full pipeline: all four seasons in one call
+let result = grove_compiler::compile("let x = 2 + 3  x * 4");
+assert!(result.success);
+println!("Bytecode: {:?}", result.bytecode);
 
-The lexer handles numbers, identifiers, operators, keywords, and whitespace. The parser is a recursive descent parser producing a typed AST.
-
-### Summer: Type Checking
-
-```rust
-use grove_compiler::summer::TypeChecker;
-
-let mut checker = TypeChecker::new();
-checker.check_program(&ast)?;
-// Validates: variables declared before use, types consistent, no duplicate declarations
-```
-
-### Autumn: Optimization
-
-```rust
-use grove_compiler::autumn::Optimizer;
-
-let optimized = Optimizer::new().optimize(&ast);
-// Applies: constant folding (2+3→5), dead code elimination, strength reduction (x*2→x+x)
-```
-
-| Optimization | Example | Savings |
-|---|---|---|
-| Constant folding | `2 + 3` → `5` | Eliminates runtime arithmetic |
-| Dead code elimination | `if false { ... }` → removed | Eliminates unreachable branches |
-| Strength reduction | `x * 2` → `x + x` | Addition is cheaper than multiplication |
-
-### Winter: Ternary Bytecode Emission
-
-```rust
-use grove_compiler::winter::Emitter;
-
-let bytecode = Emitter::new().emit(&optimized);
-for instr in &bytecode.instructions {
-    println!("{:?}", instr);
+// Or walk the seasons yourself:
+let tokens = tokenize("1 + 2 * 3");
+let parsed = parse("1 + 2 * 3");
+if let Some(expr) = parsed.expr {
+    let typed = typecheck(&expr);
+    let optimized = optimize(&expr);
+    let compiler = Compiler::new().compile(&optimized);
+    println!("Constants: {:?}", compiler.constants);
+    println!("Bytecode: {:?}", compiler.bytecode());
 }
-// Each instruction has an opcode (Trit) and operand (Vec<Trit>)
 ```
 
-**Balanced ternary encoding**: Numbers are encoded in balanced ternary (signed ternary). The value 5 encodes as [Pos, Neg, Neg] because 1·9 + (-1)·3 + (-1)·1 = 5... wait, actually 1·9 + (-1)·3 + (-1)·1 = 5. The crate handles encoding/decoding automatically.
+## Expression Language
 
-## Full Pipeline
+The Grove expression language supports:
+
+| Syntax | Description |
+|--------|-------------|
+| `42`, `3.14` | Numeric literals |
+| `x`, `foo_bar` | Identifiers |
+| `+`, `-`, `*`, `/` | Arithmetic operators |
+| `==`, `!=`, `<`, `>` | Comparison operators |
+| `(...)` | Parenthesized grouping |
+| `let x = expr body` | Let bindings |
+| `if cond then else else` | Conditionals |
+| `cond ? then : else` | Ternary expressions |
+| `-expr` | Unary negation |
+| `true`, `false` | Boolean literals |
+
+### Examples
 
 ```rust
-use grove_compiler::{spring, summer, autumn, winter};
+use grove_compiler::compile;
 
-let source = "let x = 2 + 3; if x > 4 { x } else { 0 }";
+// Arithmetic
+compile("2 + 3 * 4");         // → Push(14.0), Halt  (constant folded!)
 
-// Spring: parse
-let ast = spring::Parser::new(spring::Lexer::new(source).tokenize()).parse_program()?;
+// Variables
+compile("let x = 10  x + 5"); // → Push(10), Store(x), Load(x), Push(5), Add, Halt
 
-// Summer: typecheck
-summer::TypeChecker::new().check_program(&ast)?;
+// Conditionals
+compile("if 1 42 else 99");   // → Push(1), JumpIfZero(else), Push(42), Jump(end), Push(99), Halt
 
-// Autumn: optimize (2+3 folds to 5, dead branch eliminated)
-let optimized = autumn::Optimizer::new().optimize(&ast);
-
-// Winter: emit ternary bytecode
-let bytecode = winter::Emitter::new().emit(&optimized);
-println!("{} instructions emitted", bytecode.instructions.len());
+// Ternary
+compile("1 ? 2 : 3");         // → same bytecode structure as if-else
 ```
 
-## Module Map
+## Architecture
 
-| Module | What it does |
-|---|---|
-| `token` | `Token` enum — all lexical tokens |
-| `ast` | `Expr`, `Stmt`, `Program`, `Trit`, `TernaryBytecode` — AST + ternary types |
-| `spring` | `Lexer`, `Parser` — tokenization and recursive descent parsing |
-| `summer` | `TypeChecker` — scope validation, type consistency |
-| `autumn` | `Optimizer` — constant folding, dead code elimination, strength reduction |
-| `winter` | `Emitter` — AST → balanced ternary bytecode |
-| `error` | `GroveError` with seasonal context |
+```
+src/
+├── lib.rs      ← Library root, full pipeline, integration tests
+├── token.rs    ← Tokenizer & Token types
+├── ast.rs      ← AST, Type, TypedExpr, Diagnostic types
+├── spring.rs   ← Parser (spring season): tokens → AST
+├── summer.rs   ← Type checker (summer season): AST → TypedAST
+├── autumn.rs   ← Optimizer (autumn season): AST → optimized AST
+└── winter.rs   ← Code generator (winter season): AST → Bytecode
+```
 
-## Design Decisions
+## Core Types
 
-- **Why balanced ternary?** Binary loses the zero state (you get -1 and +1 but not "idle"). Ternary encodes the natural three-state logic of agent actions: inhibit/idle/activate.
-- **Why season metaphor?** Because the pipeline stages have genuine seasonal character. Spring creates, summer validates, autumn strips, winter crystallizes. It's also memorable — "check autumn for optimizations" sticks better than "check phase 3."
-- **Why not LLVM?** This compiler targets a custom ternary VM for agent instructions, not general-purpose hardware. LLVM doesn't have a ternary backend.
+```rust
+// Tokens
+enum Token { Num(f64), Ident(String), Plus, Minus, Star, Slash, 
+             Eq, Neq, Lt, Gt, LParen, RParen, Let, If, Else, 
+             Question, Colon, Assign, Eof }
 
-## Links
+// AST
+enum Expr { Lit(f64), Var(String), BinOp(Box<Expr>, BinOpKind, Box<Expr>),
+            Unary(UnaryKind, Box<Expr>), If(Box<Expr>, Box<Expr>, Box<Expr>),
+            Let(String, Box<Expr>, Box<Expr>), 
+            Ternary(Box<Expr>, Box<Expr>, Box<Expr>) }
 
-- [Documentation](https://docs.rs/grove-compiler)
-- [Repository](https://github.com/SuperInstance/grove-compiler)
-- [crates.io](https://crates.io/crates/grove-compiler)
-- See also: [fibration-timing](https://crates.io/crates/fibration-timing) for scheduling agent bytecode execution
+// Types
+enum Type { Int, Bool, Ternary }  // Ternary = {-1, 0, +1}
+
+// Bytecode (stack machine)
+enum Bytecode { Push(f64), Add, Sub, Mul, Div, 
+                Jump(usize), JumpIfZero(usize),
+                Load(String), Store(String), Halt }
+
+// Compiler
+struct Compiler { bytecode: Vec<Bytecode>, constants: Vec<f64> }
+```
+
+All public types derive `Serialize` and `Deserialize` via [serde](https://serde.rs).
+
+## Ternary Arithmetic
+
+The ternary type system models values in {-1, 0, +1}, with modular addition:
+
+```
+ Pos + Pos → Neg   (1 + 1 = -1)
+ Neg + Neg → Pos   (-1 + -1 = +1)
+ Pos + Neg → Zero  (1 + -1 = 0)
+```
+
+This reflects the cyclical nature of the SuperInstance ecosystem, where extreme growth in one direction loops back to its opposite.
+
+## Testing
+
+```bash
+cargo test        # 74 tests across all modules
+cargo test --doc  # Doc tests including the quick-start example
+```
+
+The test suite covers tokenization, parsing, type checking, optimization, code generation, serde round-trips, and end-to-end integration.
 
 ## License
 
 MIT
+
+---
+
+*From seed to bytecode, the grove endures.* 🌲

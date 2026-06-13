@@ -1,10 +1,15 @@
+//! Abstract Syntax Tree types for the Grove compiler.
+//!
+//! The AST is the grove — a living forest of expression trees that grow during
+//! spring (parsing), are tended through summer (type checking), pruned in
+//! autumn (optimization), and harvested in winter (code generation).
+
 use serde::{Deserialize, Serialize};
 
-use crate::token::Token;
-
-/// Binary operators.
+/// Binary operator kinds.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum BinOp {
+#[derive(Copy)]
+pub enum BinOpKind {
     Add,
     Sub,
     Mul,
@@ -13,151 +18,139 @@ pub enum BinOp {
     Neq,
     Lt,
     Gt,
-    Le,
-    Ge,
 }
 
-impl BinOp {
-    /// Convert from token to binary operator, if applicable.
-    pub fn from_token(tok: &Token) -> Option<Self> {
-        match tok {
-            Token::Plus => Some(BinOp::Add),
-            Token::Minus => Some(BinOp::Sub),
-            Token::Star => Some(BinOp::Mul),
-            Token::Slash => Some(BinOp::Div),
-            Token::Eq => Some(BinOp::Eq),
-            Token::Neq => Some(BinOp::Neq),
-            Token::Lt => Some(BinOp::Lt),
-            Token::Gt => Some(BinOp::Gt),
-            Token::Le => Some(BinOp::Le),
-            Token::Ge => Some(BinOp::Ge),
-            _ => None,
-        }
-    }
-}
-
-/// Unary operators.
+/// Unary operator kinds.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum UnOp {
+#[derive(Copy)]
+pub enum UnaryKind {
     Neg,
+    Not,
 }
 
-/// Expression nodes.
+/// A expression in the grove AST.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Expr {
-    Literal(f64),
+    /// Numeric literal.
+    Lit(f64),
+    /// Variable reference.
     Var(String),
-    Binary(Box<Expr>, BinOp, Box<Expr>),
-    Unary(UnOp, Box<Expr>),
+    /// Binary operation: left `op` right.
+    BinOp(Box<Expr>, BinOpKind, Box<Expr>),
+    /// Unary operation: `op` expr.
+    Unary(UnaryKind, Box<Expr>),
+    /// Conditional: `if condition then else`.
     If(Box<Expr>, Box<Expr>, Box<Expr>),
-    Call(String, Vec<Expr>),
+    /// Let binding: `let name = value in body`.
+    Let(String, Box<Expr>, Box<Expr>),
+    /// Ternary: `condition ? then : else`.
+    Ternary(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
-/// Statement nodes.
+/// Type classification for expressions.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Type {
+    /// Integer / numeric type.
+    Int,
+    /// Boolean type.
+    Bool,
+    /// Ternary type: values in {-1, 0, +1}.
+    Ternary,
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Int => write!(f, "Int"),
+            Type::Bool => write!(f, "Bool"),
+            Type::Ternary => write!(f, "Ternary"),
+        }
+    }
+}
+
+/// A type-annotated expression, produced by the summer (type-checking) pass.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TypedExpr {
+    pub expr: Expr,
+    pub ty: Type,
+}
+
+/// A top-level statement.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Stmt {
-    Let(String, Expr),
-    Assign(String, Expr),
-    If(Expr, Vec<Stmt>, Vec<Stmt>),
-    Return(Expr),
+    /// Expression statement.
     Expr(Expr),
+    /// Let declaration at top level.
+    Let(String, Expr),
 }
 
-/// A full program: a list of statements.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Program {
-    pub stmts: Vec<Stmt>,
+/// A diagnostic message with source span information.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Diagnostic {
+    pub message: String,
+    pub start: usize,
+    pub end: usize,
 }
 
-/// Balanced ternary trit: {-1, 0, +1}.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Trit {
-    Neg,
-    Zero,
-    Pos,
-}
-
-impl Trit {
-    /// Convert to integer value.
-    pub fn value(self) -> i8 {
-        match self {
-            Trit::Neg => -1,
-            Trit::Zero => 0,
-            Trit::Pos => 1,
-        }
-    }
-
-    /// Create from integer value.
-    pub fn from_value(v: i8) -> Self {
-        match v {
-            -1 => Trit::Neg,
-            0 => Trit::Zero,
-            1 => Trit::Pos,
-            _ => panic!("trit value must be -1, 0, or 1, got {v}"),
-        }
-    }
-}
-
-/// A single ternary instruction.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TernaryInstruction {
-    pub opcode: Trit,
-    pub operand: Vec<Trit>,
-}
-
-/// Ternary bytecode: a sequence of ternary instructions plus a constant pool.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TernaryBytecode {
-    pub instructions: Vec<TernaryInstruction>,
-    pub constants: Vec<f64>,
-}
-
-impl Default for TernaryBytecode {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl TernaryBytecode {
-    /// Create an empty bytecode object.
-    pub fn new() -> Self {
+impl Diagnostic {
+    pub fn new(message: impl Into<String>, start: usize, end: usize) -> Self {
         Self {
-            instructions: Vec::new(),
-            constants: Vec::new(),
+            message: message.into(),
+            start,
+            end,
         }
     }
 }
 
-/// Balanced ternary number encoding utilities.
-pub mod ternary {
-    use crate::ast::Trit;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    /// Encode an integer into balanced ternary trits (most-significant first).
-    pub fn encode_int(mut n: i64) -> Vec<Trit> {
-        if n == 0 {
-            return vec![Trit::Zero];
-        }
-        let mut trits = Vec::new();
-        while n != 0 {
-            let rem = n.rem_euclid(3);
-            match rem {
-                0 => trits.push(Trit::Zero),
-                1 => trits.push(Trit::Pos),
-                2 => trits.push(Trit::Neg),
-                _ => unreachable!(),
-            }
-            n = (n - if rem == 2 { -1 } else { rem }) / 3;
-        }
-        trits.reverse();
-        trits
+    #[test]
+    fn expr_literal() {
+        let e = Expr::Lit(42.0);
+        assert!(matches!(e, Expr::Lit(v) if v == 42.0));
     }
 
-    /// Decode balanced ternary trits back to an integer.
-    pub fn decode_int(trits: &[Trit]) -> i64 {
-        let mut val: i64 = 0;
-        for &t in trits {
-            val = val * 3 + t.value() as i64;
+    #[test]
+    fn expr_variable() {
+        let e = Expr::Var("x".into());
+        assert!(matches!(e, Expr::Var(s) if s == "x"));
+    }
+
+    #[test]
+    fn expr_binop() {
+        let e = Expr::BinOp(Box::new(Expr::Lit(1.0)), BinOpKind::Add, Box::new(Expr::Lit(2.0)));
+        if let Expr::BinOp(l, op, r) = e {
+            assert_eq!(*l, Expr::Lit(1.0));
+            assert_eq!(op, BinOpKind::Add);
+            assert_eq!(*r, Expr::Lit(2.0));
+        } else {
+            panic!("expected BinOp");
         }
-        val
+    }
+
+    #[test]
+    fn type_display() {
+        assert_eq!(Type::Int.to_string(), "Int");
+        assert_eq!(Type::Bool.to_string(), "Bool");
+        assert_eq!(Type::Ternary.to_string(), "Ternary");
+    }
+
+    #[test]
+    fn typed_expr_construction() {
+        let te = TypedExpr {
+            expr: Expr::Lit(1.0),
+            ty: Type::Ternary,
+        };
+        assert_eq!(te.ty, Type::Ternary);
+    }
+
+    #[test]
+    fn diagnostic_new() {
+        let d = Diagnostic::new("oops", 0, 5);
+        assert_eq!(d.message, "oops");
+        assert_eq!(d.start, 0);
+        assert_eq!(d.end, 5);
     }
 }
